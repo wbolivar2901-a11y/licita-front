@@ -46,3 +46,4 @@ pnpm-lock.yaml    -diff
 CHANGELOG.md           export-ignore
 /tests                 export-ignore
 /docker                export-ignore
+.vscode/

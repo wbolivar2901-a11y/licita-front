@@ -1,0 +1,95 @@
+// src/app/interceptors/auth.interceptor.ts
+import { Injectable } from '@angular/core';
+import {
+  HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse
+} from '@angular/common/http';
+import { Observable, throwError, switchMap, catchError } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { AuthService } from '../services/auth.service';
+import { Router } from '@angular/router';
+
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  private isRefreshing = false;
+
+  constructor(private auth: AuthService, private router: Router) {}
+
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const isLicita = isLicitaApi(req.url);                  // <-- SOLO LICITA-API
+    const isIam    = isIamApi(req.url);                     // <-- IAM (login/refresh/etc)
+    const isIamRefresh = isIam && req.url.startsWith(`${environment.iamBase}/api/auth/refresh`); // <-- BYPASS
+
+    let cloned = req;
+
+    // Adjunta Authorization SOLO para LICITA-API
+    const token = this.auth.getToken();
+    if (token && isLicita) {
+      cloned = cloned.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
+    }
+
+    // BYPASS total para el endpoint de refresh del IAM (sin bearer, sin auto-refresh)
+    if (isIamRefresh) {
+      return next.handle(cloned);
+    }
+
+    // Auto-refresh preventivo SOLO para LICITA-API
+    if (isLicita && this.auth.isAccessTokenNearExpiry(60) && token && !this.isRefreshing) {
+      this.isRefreshing = true;
+      return this.auth.refresh().pipe(
+        switchMap(() => {
+          const newToken = this.auth.getToken();
+          this.isRefreshing = false;
+          const again = newToken
+            ? cloned.clone({ setHeaders: { Authorization: `Bearer ${newToken}` } })
+            : cloned;
+          return next.handle(again);
+        }),
+        catchError(err => {
+          this.isRefreshing = false;
+          this.auth.logout();
+          this.router.navigateByUrl('/login');
+          return throwError(() => err);
+        })
+      );
+    }
+
+    // Manejo de 401 SOLO para LICITA-API (retry tras refresh una vez)
+    return next.handle(cloned).pipe(
+      catchError((err: HttpErrorResponse) => {
+        if (isLicita && err.status === 401) {
+          const raw = this.auth.getRawToken();
+          if (raw?.refresh_token && !this.isRefreshing) {
+            this.isRefreshing = true;
+            return this.auth.refresh().pipe(
+              switchMap(() => {
+                const newToken = this.auth.getToken();
+                this.isRefreshing = false;
+                const retry = newToken
+                  ? cloned.clone({ setHeaders: { Authorization: `Bearer ${newToken}` } })
+                  : cloned;
+                return next.handle(retry);
+              }),
+              catchError(e2 => {
+                this.isRefreshing = false;
+                this.auth.logout();
+                this.router.navigateByUrl('/login');
+                return throwError(() => e2);
+              })
+            );
+          }
+          this.auth.logout();
+          this.router.navigateByUrl('/login');
+        }
+        return throwError(() => err);
+      })
+    );
+
+    // Helpers
+    function isLicitaApi(url: string): boolean {
+      return url.startsWith(environment.apiBase);           // <-- antes incluía iamBase; ahora NO
+    }
+    function isIamApi(url: string): boolean {
+      return url.startsWith(environment.iamBase);
+    }
+  }
+}

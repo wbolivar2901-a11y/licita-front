@@ -1,0 +1,19 @@
+<h1>Iniciar sesión</h1>
+
+<form [formGroup]="form" (ngSubmit)="submit()">
+  <div>
+    <label>Email</label><br>
+    <input type="email" formControlName="email" />
+  </div>
+
+  <div>
+    <label>Contraseña</label><br>
+    <input type="password" formControlName="password" />
+  </div>
+
+  <button type="submit" [disabled]="loading || form.invalid">
+    {{ loading ? 'Entrando...' : 'Entrar' }}
+  </button>
+
+  <p *ngIf="errorMsg" style="color:red">{{ errorMsg }}</p>
+</form>

@@ -1,0 +1,21 @@
+<h2>Dashboard</h2>
+
+<div class="toolbar">
+  <button type="button" (click)="onLogout()">Cerrar sesión</button>
+  <!-- NUEVO -->
+  <button type="button" (click)="testPing()" style="margin-left:12px">Probar /secure-echo</button>
+  <button type="button" (click)="disableMyself()">Desactivar usuario (tenant)</button>
+</div>
+
+<p>Bienvenido. Si ves esto, el login funcionó y se guardó el token.</p>
+
+<p>Token expira en: {{ (msLeft/1000) | number:'1.0-0' }}s</p>
+
+<!-- NUEVO: muestra resultado/errores de la prueba -->
+<div *ngIf="testResult" style="margin-top:8px;">
+  <pre>{{ testResult | json }}</pre>
+</div>
+<div *ngIf="testError" style="margin-top:8px; color:#b00020">
+  <strong>Error {{ testError?.status }}:</strong>
+  <pre>{{ testError?.body | json }}</pre>
+</div>
